@@ -1,6 +1,6 @@
-// Package aerpcproxy provides simple proxy and common middleware from an AppEngine HTTP request to Go function.
+// Package rpcproxy provides simple proxy and common middleware from an AppEngine HTTP request to Go function.
 // It supports gRPC style handler function: f(context, *requestProto) (*responseProto, error)
-package aerpcproxy
+package rpcproxy
 
 import (
 	"bytes"
@@ -12,7 +12,6 @@ import (
 
 	"github.com/golang/protobuf/jsonpb"
 	"github.com/golang/protobuf/proto"
-	"google.golang.org/appengine"
 )
 
 // HTTPStatus interface can report an HTTP StatusCode the object associated with.
@@ -88,7 +87,7 @@ func (h *proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	ctx := appengine.NewContext(r)
+	ctx := r.Context()
 	ret := h.backend.Call([]reflect.Value{reflect.ValueOf(ctx), reflect.ValueOf(req)})
 	if err, ok := ret[1].Interface().(error); ok && err != nil {
 		statusCode := 500

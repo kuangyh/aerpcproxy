@@ -1,6 +1,3 @@
-module github.com/kuangyh/aerpcproxy
+module github.com/kuangyh/rpcproxy
 
-require (
-	github.com/golang/protobuf v1.2.0
-	google.golang.org/appengine v1.2.0
-)
+require github.com/golang/protobuf v1.2.0
