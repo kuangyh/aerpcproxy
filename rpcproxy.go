@@ -1,4 +1,4 @@
-// Package rpcproxy provides simple proxy and common middleware from an AppEngine HTTP request to Go function.
+// Package rpcproxy provides simple proxy and common middleware from a HTTP request to Go function.
 // It supports gRPC style handler function: f(context, *requestProto) (*responseProto, error)
 package rpcproxy
 
@@ -113,7 +113,7 @@ func (h *proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// Proxy wraps a function to HTTP handler that can be directly serves AppEngine requests.
+// Proxy wraps a function to HTTP handler that can be directly serves requests.
 // Function should look like func(context.Context, *requestProto) (*responesProto, error)
 func Proxy(fn interface{}) http.Handler {
 	fnt := reflect.TypeOf(fn)
