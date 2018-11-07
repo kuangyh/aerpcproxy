@@ -2,7 +2,7 @@
 // HTTP requests from Web apps using plain JSON.
 //
 // gRPC style handler is like f(context, *requestProto) (*responseProto, error)
-// From Web app, it can be called as a POST request like /api/foo?format=json and the body is
+// From Web app, it can be called as a POST request like /api/foo?method=Bar&format=json and the body is
 // simply JSON that can be handled by github.com/golang/protobuf/jsonpb
 // For such request, the response will be Status 200 and the plain JSON object as result, or
 // any HTTP status code for error conditions.
