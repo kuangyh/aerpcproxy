@@ -9,6 +9,8 @@ import (
 	"io/ioutil"
 	"net/http"
 	"reflect"
+	"strings"
+	"unicode"
 
 	"github.com/golang/protobuf/jsonpb"
 	"github.com/golang/protobuf/proto"
@@ -137,4 +139,44 @@ func Proxy(fn interface{}) http.Handler {
 		backend: reflect.ValueOf(fn),
 		reqType: fnt.In(1).Elem(),
 	}
+}
+
+// Middleware wraps a http.Handler to new http.Handler so it can add processing in between.
+type Middleware func(http.Handler) http.Handler
+
+// Register proxies all public methods of serv to mux.
+// URL for method FooBar is /foo_bar, when mux is nil, http.DefaultServeMux will be used,
+// when middleware is not nil, proxied handler for each method will be wrapped with the middleware.
+//
+// Note that Register exports all public method of serv, it would generally be safer to pass in an interface
+// instead of struct, to avoid unintentially exports methods that's not intended to serve externally.
+func Register(mux *http.ServeMux, middleware Middleware, serv interface{}) {
+	if mux == nil {
+		mux = http.DefaultServeMux
+	}
+	servVal := reflect.ValueOf(serv)
+	servType := reflect.TypeOf(serv)
+	for i := 0; i < servType.NumMethod(); i++ {
+		m := servType.Method(i)
+		h := Proxy(servVal.MethodByName(m.Name).Interface())
+		if middleware != nil {
+			h = middleware(h)
+		}
+		mux.Handle("/"+camelCaseToUnderscore(m.Name), h)
+	}
+}
+
+func camelCaseToUnderscore(s string) string {
+	var out strings.Builder
+	for i, c := range s {
+		if unicode.IsUpper(c) {
+			if i > 0 {
+				out.WriteRune('_')
+			}
+			out.WriteRune(unicode.ToLower(c))
+		} else {
+			out.WriteRune(c)
+		}
+	}
+	return out.String()
 }
