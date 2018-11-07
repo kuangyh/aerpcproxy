@@ -131,19 +131,21 @@ func (h *methodHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	req := reflect.New(h.reqType).Interface()
 	if err := h.decoder(req, rb, format); err != nil {
-		http.Error(w, fmt.Sprintf("parse request failed, %v", err), 400)
+		http.Error(w, fmt.Sprintf("decode request failed, %v", err), 400)
 		return
 	}
 	res, err := h.backend(ctx, req)
-	if err == nil {
-		err = h.encoder(w, res, format)
-	}
 	if err != nil {
 		statusCode := 500
 		if s, ok := err.(HTTPStatus); ok {
 			statusCode = s.HTTPStatus()
 		}
 		http.Error(w, err.Error(), statusCode)
+		return
+	}
+	if err := h.encoder(w, res, format); err != nil {
+		http.Error(w, fmt.Sprintf("encode response failed, %v", err), 500)
+		return
 	}
 }
 
