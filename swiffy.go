@@ -51,28 +51,32 @@ func Error(status int, customMessage string) error {
 	}
 }
 
-// RequestInterceptor intercepts request before main handler, it can modify request as needed.
-// If non-nil res returned, all request interceptors after and main handler will be skipped but response interceptor will be run as normal.
-// If non-nil err returned, all processing will be skipped and error will be returnd to client.
-//
-// This happend to be compatible with gprc's UnaryHandler
-type RequestInterceptor func(ctx context.Context, req interface{}) (res interface{}, err error)
+// Handler describes generalize form of gRPC style functions swiffy can serve.
+// The actual handler provided to NewServiceHandler can use any types that conforms to encoder/decoder
+type Handler func(ctx context.Context, req interface{}) (res interface{}, err error)
 
-// ResponseInterceptor intercepts response after main handler, modify response as needed.
-// If non-nil err returned, all response interceptors after will be skipped and error wil be returned to client.
-type ResponseInterceptor func(ctx context.Context, res interface{}) error
+// Middleware wraps a handler and do its processing before or after calling underliring handler.
+type Middleware func(handler Handler) Handler
 
-// Options contains options like interceptors.
+// RequestDecoder decodes src into dst.
+type RequestDecoder func(dst interface{}, src []byte, format string) error
+
+// ResponseEncoder writes encoded result of src to w.
+type ResponseEncoder func(w http.ResponseWriter, src interface{}, format string) error
+
+// Options contains options like encoder/decoder.
 type Options struct {
-	RequestInterceptors  []RequestInterceptor
-	ResponseInterceptors []ResponseInterceptor
+	RequestDecoder  RequestDecoder
+	ResponseEncoder ResponseEncoder
+	Middleware      Middleware
 }
 
 type methodHandler struct {
 	// The backend function to call
-	backend reflect.Value
+	backend Handler
 	reqType reflect.Type
-	opt     *Options
+	decoder RequestDecoder
+	encoder ResponseEncoder
 }
 
 func newMethodHandler(fn interface{}, opt *Options) *methodHandler {
@@ -81,22 +85,29 @@ func newMethodHandler(fn interface{}, opt *Options) *methodHandler {
 		panic("fn is not a function")
 	}
 	ctxType := reflect.TypeOf((*context.Context)(nil)).Elem()
-	protoType := reflect.TypeOf((*proto.Message)(nil)).Elem()
 	errType := reflect.TypeOf((*error)(nil)).Elem()
 	switch {
 	case fnt.NumIn() != 2,
 		fnt.NumOut() != 2,
 		!fnt.In(0).Implements(ctxType),
-		fnt.In(1).Kind() != reflect.Ptr,
-		!fnt.In(1).Implements(protoType),
-		!fnt.Out(0).Implements(protoType),
 		fnt.Out(1) != errType:
 		panic("fn should be like func(context.Context, *requestProto) (*responesProto, error)")
 	}
+	fnv := reflect.ValueOf(fn)
+	bh := func(ctx context.Context, req interface{}) (interface{}, error) {
+		ret := fnv.Call([]reflect.Value{reflect.ValueOf(ctx), reflect.ValueOf(req)})
+		res := ret[0].Interface()
+		err, _ := ret[1].Interface().(error)
+		return res, err
+	}
+	if opt.Middleware != nil {
+		bh = opt.Middleware(bh)
+	}
 	return &methodHandler{
-		backend: reflect.ValueOf(fn),
+		backend: bh,
 		reqType: fnt.In(1).Elem(),
-		opt:     opt,
+		decoder: opt.RequestDecoder,
+		encoder: opt.ResponseEncoder,
 	}
 }
 
@@ -119,30 +130,13 @@ func (h *methodHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	ctx := r.Context()
 	req := reflect.New(h.reqType).Interface()
-	if err := h.decode(req.(proto.Message), rb, format); err != nil {
+	if err := h.decoder(req, rb, format); err != nil {
 		http.Error(w, fmt.Sprintf("parse request failed, %v", err), 400)
 		return
 	}
-	var res interface{}
-	for _, ri := range h.opt.RequestInterceptors {
-		if res, err = ri(ctx, req); res != nil || err != nil {
-			break
-		}
-	}
-	if res == nil && err == nil {
-		ret := h.backend.Call([]reflect.Value{reflect.ValueOf(ctx), reflect.ValueOf(req)})
-		res = ret[0].Interface()
-		err, _ = ret[1].Interface().(error)
-	}
+	res, err := h.backend(ctx, req)
 	if err == nil {
-		for _, ri := range h.opt.ResponseInterceptors {
-			if err = ri(ctx, res); err != nil {
-				break
-			}
-		}
-	}
-	if err == nil {
-		err = h.encode(w, res, format)
+		err = h.encoder(w, res, format)
 	}
 	if err != nil {
 		statusCode := 500
@@ -153,40 +147,47 @@ func (h *methodHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (h *methodHandler) decode(dst proto.Message, src []byte, format string) error {
+// ProtoDecoder implements RequestDecoder for protobuf.
+func ProtoDecoder(dst interface{}, src []byte, format string) error {
 	if len(src) == 0 {
 		return nil
 	}
+	dstProto, ok := dst.(proto.Message)
+	if !ok {
+		return fmt.Errorf("Decode destination is not proto")
+	}
 	switch format {
 	case "json":
-		return jsonpb.Unmarshal(bytes.NewBuffer(src), dst)
+		return jsonpb.Unmarshal(bytes.NewBuffer(src), dstProto)
 	case "proto":
-		return proto.Unmarshal(src, dst)
+		return proto.Unmarshal(src, dstProto)
 	case "text":
-		return proto.UnmarshalText(string(src), dst)
+		return proto.UnmarshalText(string(src), dstProto)
 	default:
 		return fmt.Errorf("unknown format %s", format)
 	}
 }
 
-func (h *methodHandler) encode(w http.ResponseWriter, res interface{}, format string) error {
-	var resProto proto.Message
-	var ok bool
-	if resProto, ok = res.(proto.Message); !ok || resProto == nil {
-		return fmt.Errorf("Cannot encode non proto or nil response")
+// ProtoEncoder implements ResponseEncoder for protobuf.
+func ProtoEncoder(w http.ResponseWriter, src interface{}, format string) error {
+	srcProto, ok := src.(proto.Message)
+	if !ok {
+		return fmt.Errorf("Encode source is not proto")
 	}
 	switch format {
 	case "json":
 		w.Header().Add("Content-Type", "text/json; charset=utf-8")
 		m := jsonpb.Marshaler{}
-		m.Marshal(w, resProto)
+		m.Marshal(w, srcProto)
 	case "proto":
 		w.Header().Add("Content-Type", "application/x-protobuf")
-		rb, _ := proto.Marshal(resProto)
+		rb, _ := proto.Marshal(srcProto)
 		w.Write(rb)
 	case "text":
 		w.Header().Add("Content-Type", "text/plain; charset=utf-8")
-		proto.MarshalText(w, resProto)
+		proto.MarshalText(w, srcProto)
+	default:
+		return fmt.Errorf("unknown format %s", format)
 	}
 	return nil
 }
@@ -196,6 +197,8 @@ type serviceHandler struct {
 }
 
 // NewServiceHandler creates an http.Handler that serves all public method of serv.
+// These public methods must conforms to Handler, but their req and res can be any types that implements proto.Message,
+// NewServiceHandler handles them using reflect.
 //
 // Note that RegisterService exports all public method of serv, it would generally be safer to pass in an interface
 // instead of struct, to avoid unintentially exports methods that's not intended to serve externally.
@@ -203,6 +206,13 @@ func NewServiceHandler(serv interface{}, opt *Options) http.Handler {
 	if opt == nil {
 		opt = &Options{}
 	}
+	if opt.RequestDecoder == nil {
+		opt.RequestDecoder = ProtoDecoder
+	}
+	if opt.ResponseEncoder == nil {
+		opt.ResponseEncoder = ProtoEncoder
+	}
+
 	methods := map[string]http.Handler{}
 	servVal := reflect.ValueOf(serv)
 	servType := reflect.TypeOf(serv)

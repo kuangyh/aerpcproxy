@@ -10,19 +10,23 @@ import (
 	"github.com/kuangyh/swiffy/examples/hello"
 )
 
-func logInterceptor(ctx context.Context, req interface{}) (interface{}, error) {
-	if reqProto, ok := req.(proto.Message); ok {
-		log.Printf("Request: %s", proto.MarshalTextString(reqProto))
+func protoLogger(h swiffy.Handler) swiffy.Handler {
+	return func(ctx context.Context, req interface{}) (interface{}, error) {
+		if reqProto, ok := req.(proto.Message); ok {
+			log.Printf("Request: %s", proto.MarshalTextString(reqProto))
+		}
+		res, err := h(ctx, req)
+		if err != nil {
+			log.Printf("Response: error %v", err)
+		} else if resProto, ok := res.(proto.Message); ok {
+			log.Printf("Response: %s", proto.MarshalTextString(resProto))
+		}
+		return res, err
 	}
-	return nil, nil
 }
 
 func main() {
-	opt := &swiffy.Options{
-		RequestInterceptors: []swiffy.RequestInterceptor{
-			logInterceptor,
-		},
-	}
+	opt := &swiffy.Options{Middleware: protoLogger}
 
 	var helloServ hello.HelloServiceServer = &hello.Service{}
 	http.Handle("/api/hello", swiffy.NewServiceHandler(helloServ, opt))
