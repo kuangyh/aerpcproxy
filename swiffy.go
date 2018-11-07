@@ -1,6 +1,12 @@
-// Package rpcproxy provides simple proxy and common middleware from a HTTP request to Go function.
-// It supports gRPC style handler function: f(context, *requestProto) (*responseProto, error)
-package rpcproxy
+// Package swiffy exposes gRPC style handler function as HTTP handler that can directly handles
+// HTTP requests from Web apps using plain JSON.
+//
+// gRPC style handler is like f(context, *requestProto) (*responseProto, error)
+// From Web app, it can be called as a POST request like /api/foo?format=json and the body is
+// simply JSON that can be handled by github.com/golang/protobuf/jsonpb
+// For such request, the response will be Status 200 and the plain JSON object as result, or
+// any HTTP status code for error conditions.
+package swiffy
 
 import (
 	"bytes"
@@ -115,9 +121,9 @@ func (h *proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// Proxy wraps a function to HTTP handler that can be directly serves requests.
+// Handler wraps a function to HTTP handler that can be directly serves requests.
 // Function should look like func(context.Context, *requestProto) (*responesProto, error)
-func Proxy(fn interface{}) http.Handler {
+func Handler(fn interface{}) http.Handler {
 	fnt := reflect.TypeOf(fn)
 	if fnt.Kind() != reflect.Func {
 		panic("fn is not a function")
@@ -158,7 +164,7 @@ func RegisterService(mux *http.ServeMux, middleware Middleware, serv interface{}
 	servType := reflect.TypeOf(serv)
 	for i := 0; i < servType.NumMethod(); i++ {
 		m := servType.Method(i)
-		h := Proxy(servVal.MethodByName(m.Name).Interface())
+		h := Handler(servVal.MethodByName(m.Name).Interface())
 		if middleware != nil {
 			h = middleware(h)
 		}
@@ -168,15 +174,17 @@ func RegisterService(mux *http.ServeMux, middleware Middleware, serv interface{}
 
 func camelCaseToUnderscore(s string) string {
 	var out strings.Builder
+	var prev rune
 	for i, c := range s {
-		if unicode.IsUpper(c) {
-			if i > 0 {
+		if unicode.IsUpper(c) || unicode.IsDigit(c) {
+			if i > 0 && (!unicode.IsDigit(c) || !unicode.IsDigit(prev)) {
 				out.WriteRune('_')
 			}
 			out.WriteRune(unicode.ToLower(c))
 		} else {
 			out.WriteRune(c)
 		}
+		prev = c
 	}
 	return out.String()
 }
