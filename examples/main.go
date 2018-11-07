@@ -10,9 +10,7 @@ import (
 
 func main() {
 	var helloServ hello.HelloServiceServer = &hello.Service{}
-	helloMux := http.NewServeMux()
-	swiffy.RegisterService(helloMux, nil, helloServ)
-	http.Handle("/api/hello/", http.StripPrefix("/api/hello", helloMux))
+	swiffy.RegisterService(nil, "/api/hello", nil, helloServ)
 
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }

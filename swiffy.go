@@ -121,9 +121,9 @@ func (h *proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// Handler wraps a function to HTTP handler that can be directly serves requests.
+// NewHandler wraps a function to HTTP handler that can be directly serves requests.
 // Function should look like func(context.Context, *requestProto) (*responesProto, error)
-func Handler(fn interface{}) http.Handler {
+func NewHandler(fn interface{}) http.Handler {
 	fnt := reflect.TypeOf(fn)
 	if fnt.Kind() != reflect.Func {
 		panic("fn is not a function")
@@ -151,12 +151,12 @@ func Handler(fn interface{}) http.Handler {
 type Middleware func(http.Handler) http.Handler
 
 // RegisterService proxies all public methods of serv to mux.
-// URL for method FooBar is /foo_bar, when mux is nil, http.DefaultServeMux will be used,
+// URL for method FooBar is /{prefix}/foo_bar, when mux is nil, http.DefaultServeMux will be used,
 // when middleware is not nil, proxied handler for each method will be wrapped with the middleware.
 //
 // Note that RegisterService exports all public method of serv, it would generally be safer to pass in an interface
 // instead of struct, to avoid unintentially exports methods that's not intended to serve externally.
-func RegisterService(mux *http.ServeMux, middleware Middleware, serv interface{}) {
+func RegisterService(mux *http.ServeMux, prefix string, middleware Middleware, serv interface{}) {
 	if mux == nil {
 		mux = http.DefaultServeMux
 	}
@@ -164,11 +164,11 @@ func RegisterService(mux *http.ServeMux, middleware Middleware, serv interface{}
 	servType := reflect.TypeOf(serv)
 	for i := 0; i < servType.NumMethod(); i++ {
 		m := servType.Method(i)
-		h := Handler(servVal.MethodByName(m.Name).Interface())
+		h := NewHandler(servVal.MethodByName(m.Name).Interface())
 		if middleware != nil {
 			h = middleware(h)
 		}
-		mux.Handle("/"+camelCaseToUnderscore(m.Name), h)
+		mux.Handle(prefix+"/"+camelCaseToUnderscore(m.Name), h)
 	}
 }
 
