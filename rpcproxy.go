@@ -144,13 +144,13 @@ func Proxy(fn interface{}) http.Handler {
 // Middleware wraps a http.Handler to new http.Handler so it can add processing in between.
 type Middleware func(http.Handler) http.Handler
 
-// Register proxies all public methods of serv to mux.
+// RegisterService proxies all public methods of serv to mux.
 // URL for method FooBar is /foo_bar, when mux is nil, http.DefaultServeMux will be used,
 // when middleware is not nil, proxied handler for each method will be wrapped with the middleware.
 //
-// Note that Register exports all public method of serv, it would generally be safer to pass in an interface
+// Note that RegisterService exports all public method of serv, it would generally be safer to pass in an interface
 // instead of struct, to avoid unintentially exports methods that's not intended to serve externally.
-func Register(mux *http.ServeMux, middleware Middleware, serv interface{}) {
+func RegisterService(mux *http.ServeMux, middleware Middleware, serv interface{}) {
 	if mux == nil {
 		mux = http.DefaultServeMux
 	}
