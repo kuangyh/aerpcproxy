@@ -90,6 +90,8 @@ func newMethodHandler(fn interface{}, opt *Options) *methodHandler {
 	case fnt.NumIn() != 2,
 		fnt.NumOut() != 2,
 		!fnt.In(0).Implements(ctxType),
+		// To allow create instance of input.
+		fnt.In(1).Kind() != reflect.Ptr,
 		fnt.Out(1) != errType:
 		panic("fn should be like func(context.Context, *requestProto) (*responesProto, error)")
 	}
@@ -123,7 +125,7 @@ func (h *methodHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	} else {
 		rb, err = ioutil.ReadAll(r.Body)
 		if err != nil {
-			http.Error(w, fmt.Sprintf("read request from HTTP body failed, %v", err), 400)
+			http.Error(w, fmt.Sprintf("Read request from HTTP body failed, %v", err), 400)
 			return
 		}
 	}
@@ -131,7 +133,7 @@ func (h *methodHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	req := reflect.New(h.reqType).Interface()
 	if err := h.decoder(req, rb, format); err != nil {
-		http.Error(w, fmt.Sprintf("decode request failed, %v", err), 400)
+		http.Error(w, fmt.Sprintf("Decode request failed, %v", err), 400)
 		return
 	}
 	res, err := h.backend(ctx, req)
@@ -144,7 +146,7 @@ func (h *methodHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.encoder(w, res, format); err != nil {
-		http.Error(w, fmt.Sprintf("encode response failed, %v", err), 500)
+		http.Error(w, fmt.Sprintf("Encode response failed, %v", err), 500)
 		return
 	}
 }
@@ -166,7 +168,7 @@ func ProtoDecoder(dst interface{}, src []byte, format string) error {
 	case "text":
 		return proto.UnmarshalText(string(src), dstProto)
 	default:
-		return fmt.Errorf("unknown format %s", format)
+		return fmt.Errorf("Unknown format %s", format)
 	}
 }
 
@@ -189,7 +191,7 @@ func ProtoEncoder(w http.ResponseWriter, src interface{}, format string) error {
 		w.Header().Add("Content-Type", "text/plain; charset=utf-8")
 		proto.MarshalText(w, srcProto)
 	default:
-		return fmt.Errorf("unknown format %s", format)
+		return fmt.Errorf("Unknown format %s", format)
 	}
 	return nil
 }
