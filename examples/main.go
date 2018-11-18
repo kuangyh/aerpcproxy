@@ -6,8 +6,8 @@ import (
 	"net/http"
 
 	"github.com/golang/protobuf/proto"
-	"github.com/kuangyh/swiffy"
-	"github.com/kuangyh/swiffy/examples/hello"
+	"yuheng.io/swiffy"
+	"yuheng.io/swiffy/examples/hello"
 )
 
 func protoLogger(h swiffy.Handler) swiffy.Handler {

@@ -1,4 +1,4 @@
-module github.com/kuangyh/swiffy
+module yuheng.io/swiffy
 
 require (
 	github.com/golang/protobuf v1.2.0

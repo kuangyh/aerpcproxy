@@ -1,9 +1,9 @@
-module github.com/kuangyh/swiffy/examples
+module yuheng.io/swiffy/examples
 
-replace github.com/kuangyh/swiffy => ../
+replace yuheng.io/swiffy => ../
 
 require (
 	github.com/golang/protobuf v1.2.0
-	github.com/kuangyh/swiffy v0.0.0-20181107201752-00ad0c1beb78
 	google.golang.org/grpc v1.16.0
+	yuheng.io/swiffy v0.0.0-20181107203115-bfdf8ae42795
 )
