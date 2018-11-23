@@ -1,13 +1,15 @@
+//go:generate protoc -Iprotos --go_out=plugins=grpc:protos protos/hello_service.proto
 package main
 
 import (
 	"context"
 	"log"
+	"fmt"
 	"net/http"
 
 	"github.com/golang/protobuf/proto"
 	"yuheng.io/swiffy"
-	"yuheng.io/swiffy/examples/hello"
+	pb "yuheng.io/swiffy/examples/protos"
 )
 
 func protoLogger(h swiffy.Handler) swiffy.Handler {
@@ -25,11 +27,22 @@ func protoLogger(h swiffy.Handler) swiffy.Handler {
 	}
 }
 
+// helloServ implements gRPC HelloService
+type helloServ struct{}
+
+// Hello implements gRPC call Hello()
+func (h *helloServ) Hello(ctx context.Context, req *pb.HelloRequest) (*pb.HelloResponse, error) {
+	if req.Name == "" {
+		return nil, fmt.Errorf("No name")
+	}
+	return &pb.HelloResponse{
+		Message: fmt.Sprintf("Hello %s", req.Name),
+	}, nil
+}
+
+
 func main() {
 	opt := &swiffy.Options{Middleware: protoLogger}
-
-	var helloServ hello.HelloServiceServer = &hello.Service{}
-	http.Handle("/api/hello", swiffy.NewServiceHandler(helloServ, opt))
-
+	http.Handle("/api/hello", swiffy.NewServiceHandler(pb.HelloServiceServer(&helloServ{}), opt))
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }
