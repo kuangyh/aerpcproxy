@@ -115,13 +115,13 @@ func newMethodHandler(fn interface{}, opt *Options) *methodHandler {
 
 func (h *methodHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var err error
-	format := "json"
-	if v := r.Form["format"]; len(v) > 0 {
-		format = v[0]
+	format := r.FormValue("format")
+	if format == "" {
+		format = "json"
 	}
 	var rb []byte
-	if v := r.Form["request"]; len(v) > 0 {
-		rb = ([]byte)(v[0])
+	if s := r.FormValue("request"); s != "" {
+		rb = ([]byte)(s)
 	} else {
 		rb, err = ioutil.ReadAll(r.Body)
 		if err != nil {
@@ -228,11 +228,7 @@ func NewServiceHandler(serv interface{}, opt *Options) http.Handler {
 }
 
 func (h *serviceHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	r.ParseForm()
-	var method string
-	if v := r.Form["method"]; len(v) > 0 {
-		method = v[0]
-	}
+	method := r.FormValue("method")
 	if method == "" {
 		http.Error(w, "No method parameter", 400)
 		return
