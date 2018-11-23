@@ -12,6 +12,8 @@ import (
 	pb "yuheng.io/swiffy/examples/protos"
 )
 
+// protoLogger is an example of swiffy.Middleware usage: intercept and print request and responese,
+// you can do more like modify request before calling underliring handler etc.
 func protoLogger(h swiffy.Handler) swiffy.Handler {
 	return func(ctx context.Context, req interface{}) (interface{}, error) {
 		if reqProto, ok := req.(proto.Message); ok {
@@ -39,7 +41,6 @@ func (h *helloServ) Hello(ctx context.Context, req *pb.HelloRequest) (*pb.HelloR
 		Message: fmt.Sprintf("Hello %s", req.Name),
 	}, nil
 }
-
 
 func main() {
 	opt := &swiffy.Options{Middleware: protoLogger}
