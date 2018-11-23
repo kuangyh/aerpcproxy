@@ -29,7 +29,7 @@ func protoLogger(h swiffy.Handler) swiffy.Handler {
 	}
 }
 
-// helloServ implements gRPC HelloService
+// helloServ implements gRPC Hello service
 type helloServ struct{}
 
 // Hello implements gRPC call Hello()
@@ -44,6 +44,6 @@ func (h *helloServ) Hello(ctx context.Context, req *pb.HelloRequest) (*pb.HelloR
 
 func main() {
 	opt := &swiffy.Options{Middleware: protoLogger}
-	http.Handle("/api/hello", swiffy.NewServiceHandler(pb.HelloServiceServer(&helloServ{}), opt))
+	http.Handle("/api/hello", swiffy.NewServiceHandler(pb.HelloServer(&helloServ{}), opt))
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }
