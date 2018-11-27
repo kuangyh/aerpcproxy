@@ -224,7 +224,6 @@ func ProtoEncoder(w http.ResponseWriter, status int, src interface{}, format str
 	default:
 		return fmt.Errorf("Unknown format %s", format)
 	}
-	return nil
 }
 
 type serviceHandler struct {
