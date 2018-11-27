@@ -215,8 +215,8 @@ func ProtoEncoder(w http.ResponseWriter, status int, src interface{}, format str
 		if err != nil {
 			return err
 		}
-		w.Write(rb)
-		return nil
+		_, err = w.Write(rb)
+		return err
 	case "text":
 		w.Header().Add("Content-Type", "text/plain; charset=utf-8")
 		w.WriteHeader(status)
