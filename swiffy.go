@@ -75,7 +75,7 @@ type Middleware func(handler Handler) Handler
 type RequestDecoder func(dst interface{}, src []byte, format string) error
 
 // ResponseEncoder writes encoded result of src to w.
-type ResponseEncoder func(w http.ResponseWriter, src interface{}, format string) error
+type ResponseEncoder func(w http.ResponseWriter, status int, src interface{}, format string) error
 
 // Options contains options like encoder/decoder.
 type Options struct {
@@ -150,14 +150,15 @@ func (h *methodHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	res, err := h.backend(ctx, req)
+
+	w.Header().Set("X-Content-Type-Options", "nosniff")
 	if err != nil {
 		st := 500
 		if e, ok := err.(WithHTTPStatus); ok {
 			st = e.HTTPStatus()
 		}
-		w.WriteHeader(st)
 		if e, ok := err.(WithMessage); ok {
-			if m := e.Message(); m != nil && h.encoder(w, m, format) == nil {
+			if m := e.Message(); m != nil && h.encoder(w, st, m, format) == nil {
 				return
 			}
 			// When we cannot encode message provided, we fallback to use err.String()
@@ -165,12 +166,10 @@ func (h *methodHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			// parse the pure text and blow up. But we should blame client for blow up
 			// handling plain text HTTP error message then.
 		}
-		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		w.Header().Set("X-Content-Type-Options", "nosniff")
 		fmt.Fprintln(w, err)
 		return
 	}
-	if err := h.encoder(w, res, format); err != nil {
+	if err := h.encoder(w, 200, res, format); err != nil {
 		http.Error(w, fmt.Sprintf("Encode response failed, %v", err), 500)
 		return
 	}
@@ -198,7 +197,7 @@ func ProtoDecoder(dst interface{}, src []byte, format string) error {
 }
 
 // ProtoEncoder implements ResponseEncoder for protobuf.
-func ProtoEncoder(w http.ResponseWriter, src interface{}, format string) error {
+func ProtoEncoder(w http.ResponseWriter, status int, src interface{}, format string) error {
 	srcProto, ok := src.(proto.Message)
 	if !ok {
 		return fmt.Errorf("Encode source is not proto")
@@ -206,12 +205,14 @@ func ProtoEncoder(w http.ResponseWriter, src interface{}, format string) error {
 	switch format {
 	case "json":
 		w.Header().Add("Content-Type", "text/json; charset=utf-8")
+		w.WriteHeader(status)
 		m := jsonpb.Marshaler{}
 		if err := m.Marshal(w, srcProto); err != nil {
 			return err
 		}
 	case "proto":
 		w.Header().Add("Content-Type", "application/x-protobuf")
+		w.WriteHeader(status)
 		rb, err := proto.Marshal(srcProto)
 		if err != nil {
 			return err
@@ -219,13 +220,13 @@ func ProtoEncoder(w http.ResponseWriter, src interface{}, format string) error {
 		w.Write(rb)
 	case "text":
 		w.Header().Add("Content-Type", "text/plain; charset=utf-8")
+		w.WriteHeader(status)
 		if err := proto.MarshalText(w, srcProto); err != nil {
 			return err
 		}
 	default:
 		return fmt.Errorf("Unknown format %s", format)
 	}
-	w.Header().Set("X-Content-Type-Options", "nosniff")
 	return nil
 }
 
