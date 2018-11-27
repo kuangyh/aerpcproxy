@@ -33,28 +33,34 @@ type WithMessage interface {
 	Message() interface{}
 }
 
-type errorWithStatus struct {
-	status        int
-	customMessage string
+type errorWith struct {
+	status  int
+	text    string
+	message interface{}
 }
 
-func (e *errorWithStatus) Error() string {
-	if e.customMessage == "" {
+func (e *errorWith) Error() string {
+	if e.text == "" {
 		return http.StatusText(e.status)
 	}
-	return e.customMessage
+	return e.text
 }
 
-func (e *errorWithStatus) HTTPStatus() int {
+func (e *errorWith) HTTPStatus() int {
 	return e.status
 }
 
-// Error returns an error with corresponding HTTP status code, when custom message
+func (e *errorWith) Message() interface{} {
+	return e.message
+}
+
+// Error returns an error with corresponding HTTP status code, when text
 // emtpy, the default HTTP status text will be used.
-func Error(status int, customMessage string) error {
-	return &errorWithStatus{
-		status:        status,
-		customMessage: customMessage,
+func Error(status int, text string, message interface{}) error {
+	return &errorWith{
+		status:  status,
+		text:    text,
+		message: message,
 	}
 }
 
@@ -151,7 +157,7 @@ func (h *methodHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		w.WriteHeader(st)
 		if e, ok := err.(WithMessage); ok {
-			if h.encoder(w, e.Message(), format) == nil {
+			if m := e.Message(); m != nil && h.encoder(w, m, format) == nil {
 				return
 			}
 			// When we cannot encode message provided, we fallback to use err.String()
