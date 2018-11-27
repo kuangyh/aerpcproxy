@@ -207,9 +207,7 @@ func ProtoEncoder(w http.ResponseWriter, status int, src interface{}, format str
 		w.Header().Add("Content-Type", "text/json; charset=utf-8")
 		w.WriteHeader(status)
 		m := jsonpb.Marshaler{}
-		if err := m.Marshal(w, srcProto); err != nil {
-			return err
-		}
+		return m.Marshal(w, srcProto)
 	case "proto":
 		w.Header().Add("Content-Type", "application/x-protobuf")
 		w.WriteHeader(status)
@@ -218,12 +216,11 @@ func ProtoEncoder(w http.ResponseWriter, status int, src interface{}, format str
 			return err
 		}
 		w.Write(rb)
+		return nil
 	case "text":
 		w.Header().Add("Content-Type", "text/plain; charset=utf-8")
 		w.WriteHeader(status)
-		if err := proto.MarshalText(w, srcProto); err != nil {
-			return err
-		}
+		return proto.MarshalText(w, srcProto)
 	default:
 		return fmt.Errorf("Unknown format %s", format)
 	}
