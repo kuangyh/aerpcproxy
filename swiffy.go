@@ -20,10 +20,17 @@ import (
 	"github.com/golang/protobuf/proto"
 )
 
-// HTTPStatus interface can report an HTTP StatusCode the object associated with.
+// WithHTTPStatus interface can report an HTTP StatusCode the object associated with.
 // Often used with an error that needed to be coresponded to a certain HTTP Code
-type HTTPStatus interface {
+type WithHTTPStatus interface {
 	HTTPStatus() int
+}
+
+// WithMessage interface can report structured data for error.
+// If error returned from handler implements this interface, we return encoded result of
+// Message() instead of plain text by String()
+type WithMessage interface {
+	Message() interface{}
 }
 
 type errorWithStatus struct {
@@ -138,11 +145,23 @@ func (h *methodHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	res, err := h.backend(ctx, req)
 	if err != nil {
-		statusCode := 500
-		if s, ok := err.(HTTPStatus); ok {
-			statusCode = s.HTTPStatus()
+		st := 500
+		if e, ok := err.(WithHTTPStatus); ok {
+			st = e.HTTPStatus()
 		}
-		http.Error(w, err.Error(), statusCode)
+		w.WriteHeader(st)
+		if e, ok := err.(WithMessage); ok {
+			if h.encoder(w, e.Message(), format) == nil {
+				return
+			}
+			// When we cannot encode message provided, we fallback to use err.String()
+			// This might not be the best strategy because client may blindly trying to
+			// parse the pure text and blow up. But we should blame client for blow up
+			// handling plain text HTTP error message then.
+		}
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		fmt.Fprintln(w, err)
 		return
 	}
 	if err := h.encoder(w, res, format); err != nil {
@@ -193,6 +212,7 @@ func ProtoEncoder(w http.ResponseWriter, src interface{}, format string) error {
 	default:
 		return fmt.Errorf("Unknown format %s", format)
 	}
+	w.Header().Set("X-Content-Type-Options", "nosniff")
 	return nil
 }
 
